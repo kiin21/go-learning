@@ -35,6 +35,9 @@ func dataRace() {
 	fmt.Printf("Count: %d, Time executed: %d ms\n", count, duration)
 }
 
+
+
+
 func main() {
 	dataRace()
 }
