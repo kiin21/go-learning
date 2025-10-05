@@ -60,12 +60,7 @@ func (lp LeibnizPi) Do() (float64, error) {
 
 	chunk := int(math.Ceil(float64(lp.k+1) / float64(workers)))
 
-	actualWorkers := (lp.k + chunk) / chunk
-	if actualWorkers > workers {
-		actualWorkers = workers
-	}
-
-	resultChan := make(chan float64, actualWorkers)
+	resultChan := make(chan float64, workers)
 	errChan := make(chan error, 1)
 
 	var wg sync.WaitGroup
