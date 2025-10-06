@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -42,14 +43,25 @@ func SumLeibniz(l, r int) (float64, error) {
 	return sum, nil
 }
 
-func ComputeChunk(resultChan chan<- float64, errChan chan<- error, left, right int, wg *sync.WaitGroup) {
+func ComputeChunk(ctx context.Context, resultChan chan<- float64, errChan chan<- error, left, right int, wg *sync.WaitGroup) {
 	defer wg.Done()
+
+	select {
+	case <-ctx.Done():
+		return
+	default:
+	}
+
 	result, err := SumLeibniz(left, right)
 	if err != nil {
 		errChan <- err
 		return
 	}
-	resultChan <- result
+	select {
+	case <-ctx.Done():
+		return
+	case resultChan <- result:
+	}
 }
 
 // ===== CÁCH 1: Parallel =====
@@ -65,6 +77,9 @@ func (lp LeibnizPi) Do() (float64, error) {
 
 	var wg sync.WaitGroup
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	for w := 0; w < workers; w++ {
 		l := w * chunk
 		if l > lp.k {
@@ -75,7 +90,7 @@ func (lp LeibnizPi) Do() (float64, error) {
 			r = lp.k
 		}
 		wg.Add(1)
-		go ComputeChunk(resultChan, errChan, l, r, &wg)
+		go ComputeChunk(ctx, resultChan, errChan, l, r, &wg)
 	}
 
 	go func() {
@@ -84,20 +99,21 @@ func (lp LeibnizPi) Do() (float64, error) {
 		close(errChan)
 	}()
 
-	select {
-	case err := <-errChan:
-		if err != nil {
-			return 0.0, err
-		}
-	default:
-	}
-
 	total := 0.0
-	for v := range resultChan {
-		total += v
+	for {
+		select {
+		case err := <-errChan:
+			if err != nil {
+				cancel()
+				return 0.0, err
+			}
+		case v, ok := <-resultChan:
+			if !ok {
+				return 4 * total, nil
+			}
+			total += v
+		}
 	}
-
-	return 4 * total, nil
 }
 
 // ===== CÁCH 2: Sequential =====

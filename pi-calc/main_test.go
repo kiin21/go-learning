@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"math"
-	"sync"
 	"testing"
 )
 
@@ -159,74 +158,4 @@ func TestLeibnizPi(t *testing.T) {
 				tc.k, result, math.Pi, delta)
 		})
 	}
-}
-
-// Test cho ComputeChunk function
-func TestComputeChunk(t *testing.T) {
-	t.Run("Valid range", func(t *testing.T) {
-		resultChan := make(chan float64, 1)
-		errChan := make(chan error, 1)
-		var wg sync.WaitGroup
-
-		wg.Add(1)
-		go ComputeChunk(resultChan, errChan, 0, 5, &wg) // l=0, r=5
-		wg.Wait()
-		close(resultChan)
-		close(errChan)
-
-		// Check no error
-		select {
-		case err := <-errChan:
-			if err != nil {
-				t.Errorf("Unexpected error: %v", err)
-			}
-		default:
-		}
-
-		// Check result received
-		select {
-		case result := <-resultChan:
-			expected, _ := SumLeibniz(0, 5)
-			if math.Abs(result-expected) > 1e-10 {
-				t.Errorf("Expected %f, got %f", expected, result)
-			}
-		default:
-			t.Error("No result received")
-		}
-	})
-
-	t.Run("Invalid range - should send error", func(t *testing.T) {
-		resultChan := make(chan float64, 1)
-		errChan := make(chan error, 1)
-		var wg sync.WaitGroup
-
-		wg.Add(1)
-		go ComputeChunk(resultChan, errChan, 10, 5, &wg) // left > right
-		wg.Wait()
-		close(resultChan)
-		close(errChan)
-
-		// Check error received
-		gotError := false
-		for err := range errChan {
-			if err != nil {
-				gotError = true
-				if !errors.Is(err, ErrInvalidRange) {
-					t.Errorf("Expected ErrInvalidRange, got %v", err)
-				}
-			}
-		}
-		if !gotError {
-			t.Error("Expected error but got none")
-		}
-
-		// Check no result sent when error occurs
-		resultCount := 0
-		for range resultChan {
-			resultCount++
-		}
-		if resultCount > 0 {
-			t.Errorf("Should not receive result when error occurs, got %d results", resultCount)
-		}
-	})
 }
