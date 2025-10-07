@@ -1,0 +1,290 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>pi-calc: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/kiin21/go-learning/pi-calc/main.go (79.5%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package main
+
+import (
+        "context"
+        "errors"
+        "fmt"
+        "math"
+        "runtime"
+        "sync"
+        "time"
+)
+
+var threshold = 0.8
+var numOfCoreCpu = runtime.GOMAXPROCS(0)
+var workers = int(float64(numOfCoreCpu) * threshold)
+
+type myFunction interface {
+        Do() (float64, error)
+}
+
+type LeibnizPi struct{ k int }   // Parallel
+type LeibnizPiV2 struct{ k int } // Sequential
+
+var (
+        ErrNegativeK     = errors.New("k must be non-negative")
+        ErrInvalidRange  = errors.New("left must be less than right")
+        ErrRangeTooLarge = errors.New("range too large")
+)
+
+// Sum cho đoạn [l, r]
+func SumLeibniz(l, r int) (float64, error) <span class="cov8" title="1">{
+        if l &gt; r </span><span class="cov8" title="1">{
+                return 0.0, ErrInvalidRange
+        }</span>
+        // For testing error handling in parallel execution
+        <span class="cov8" title="1">if r-l &gt; 1_000_000_000 </span><span class="cov8" title="1">{
+                return 0.0, ErrRangeTooLarge
+        }</span>
+        <span class="cov8" title="1">sum := 0.0
+        sign := 1.0
+        if l&amp;1 == 1 </span><span class="cov8" title="1">{
+                sign = -1.0
+        }</span>
+        <span class="cov8" title="1">for i := l; i &lt;= r; i++ </span><span class="cov8" title="1">{
+                sum += sign / float64(2*i+1)
+                sign = -sign
+        }</span>
+        <span class="cov8" title="1">return sum, nil</span>
+}
+
+func ComputeChunk(ctx context.Context, resultChan chan&lt;- float64, errChan chan&lt;- error, left, right int, wg *sync.WaitGroup) <span class="cov8" title="1">{
+        defer wg.Done()
+
+        select </span>{
+        case &lt;-ctx.Done():<span class="cov8" title="1">
+                return</span>
+        default:<span class="cov8" title="1"></span>
+        }
+
+        <span class="cov8" title="1">result, err := SumLeibniz(left, right)
+        if err != nil </span><span class="cov8" title="1">{
+                errChan &lt;- err
+                return
+        }</span>
+        <span class="cov8" title="1">select </span>{
+        case &lt;-ctx.Done():<span class="cov8" title="1">
+                return</span>
+        case resultChan &lt;- result:<span class="cov8" title="1"></span>
+        }
+}
+
+// ===== CÁCH 1: Parallel =====
+func (lp LeibnizPi) Do() (float64, error) <span class="cov8" title="1">{
+        if lp.k &lt; 0 </span><span class="cov8" title="1">{
+                return 0.0, ErrNegativeK
+        }</span>
+
+        <span class="cov8" title="1">chunk := int(math.Ceil(float64(lp.k+1) / float64(workers)))
+
+        resultChan := make(chan float64, workers)
+        errChan := make(chan error, 1)
+
+        var wg sync.WaitGroup
+
+        ctx, cancel := context.WithCancel(context.Background())
+        defer cancel()
+
+        for w := 0; w &lt; workers; w++ </span><span class="cov8" title="1">{
+                l := w * chunk
+                if l &gt; lp.k </span><span class="cov8" title="1">{
+                        break</span>
+                }
+                <span class="cov8" title="1">r := l + chunk - 1
+                if r &gt; lp.k </span><span class="cov8" title="1">{
+                        r = lp.k
+                }</span>
+                <span class="cov8" title="1">wg.Add(1)
+                go ComputeChunk(ctx, resultChan, errChan, l, r, &amp;wg)</span>
+        }
+
+        <span class="cov8" title="1">go func() </span><span class="cov8" title="1">{
+                wg.Wait()
+                close(resultChan)
+                close(errChan)
+        }</span>()
+
+        <span class="cov8" title="1">total := 0.0
+        for </span><span class="cov8" title="1">{
+                select </span>{
+                case err := &lt;-errChan:<span class="cov8" title="1">
+                        if err != nil </span><span class="cov8" title="1">{
+                                cancel()
+                                return 0.0, err
+                        }</span>
+                case v, ok := &lt;-resultChan:<span class="cov8" title="1">
+                        if !ok </span><span class="cov8" title="1">{
+                                return 4 * total, nil
+                        }</span>
+                        <span class="cov8" title="1">total += v</span>
+                }
+        }
+}
+
+// ===== CÁCH 2: Sequential =====
+func (lp LeibnizPiV2) Do() (float64, error) <span class="cov8" title="1">{
+        if lp.k &lt; 0 </span><span class="cov8" title="1">{
+                return 0.0, ErrNegativeK
+        }</span>
+        <span class="cov8" title="1">sign := 1.0
+        sum := 0.0
+        for i := 0; i &lt;= lp.k; i++ </span><span class="cov8" title="1">{
+                sum += sign / float64(2*i+1)
+                sign = -sign
+        }</span>
+        <span class="cov8" title="1">return 4 * sum, nil</span>
+}
+
+type Result struct {
+        Pi                         float64
+        Delta                      float64
+        ExecutionTimeInMillisecond int64
+}
+
+func recordRuntime(f myFunction) (*Result, error) <span class="cov8" title="1">{
+        startTime := time.Now()
+
+        res, err := f.Do()
+        ms := time.Since(startTime).Milliseconds()
+
+        if err != nil </span><span class="cov8" title="1">{
+                return &amp;Result{ExecutionTimeInMillisecond: ms}, err
+        }</span>
+
+        <span class="cov8" title="1">result := &amp;Result{
+                Pi:                         res,
+                Delta:                      math.Abs(res - math.Pi),
+                ExecutionTimeInMillisecond: ms,
+        }
+        return result, nil</span>
+}
+
+func main() <span class="cov0" title="0">{
+        // iterations := []int{100_000_000_000}
+        iterations := []int{1, 10, 100, 1_000_000}
+
+        fmt.Println("=== Parallel Test ===")
+        for _, K := range iterations </span><span class="cov0" title="0">{
+                fmt.Printf("Parallel (k=%d)", K)
+                resultPtr, err := recordRuntime(LeibnizPi{k: K})
+                if err != nil </span><span class="cov0" title="0">{
+                        fmt.Println("Failed:", err)
+                        return
+                }</span>
+                <span class="cov0" title="0">fmt.Printf("Pi=%.6f, Delta=%.6e, Time=%dms\n", resultPtr.Pi, resultPtr.Delta, resultPtr.ExecutionTimeInMillisecond)</span>
+        }
+
+        <span class="cov0" title="0">fmt.Println("\n=== Sequential Test ===")
+        for _, K := range iterations </span><span class="cov0" title="0">{
+                fmt.Printf("Sequential (k=%d)", K)
+                resultPtr, err := recordRuntime(LeibnizPiV2{k: K})
+                if err != nil </span><span class="cov0" title="0">{
+                        fmt.Println("Failed:", err)
+                        return
+                }</span>
+                <span class="cov0" title="0">fmt.Printf("Pi=%.6f, Delta=%.6e, Time=%dms\n", resultPtr.Pi, resultPtr.Delta, resultPtr.ExecutionTimeInMillisecond)</span>
+        }
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

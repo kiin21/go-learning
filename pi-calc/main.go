@@ -22,14 +22,19 @@ type LeibnizPi struct{ k int }   // Parallel
 type LeibnizPiV2 struct{ k int } // Sequential
 
 var (
-	ErrNegativeK    = errors.New("k must be non-negative")
-	ErrInvalidRange = errors.New("left must be less than right")
+	ErrNegativeK     = errors.New("k must be non-negative")
+	ErrInvalidRange  = errors.New("left must be less than right")
+	ErrRangeTooLarge = errors.New("range too large")
 )
 
 // Sum cho đoạn [l, r]
 func SumLeibniz(l, r int) (float64, error) {
 	if l > r {
 		return 0.0, ErrInvalidRange
+	}
+	// For testing error handling in parallel execution
+	if r-l > 1_000_000_000 {
+		return 0.0, ErrRangeTooLarge
 	}
 	sum := 0.0
 	sign := 1.0
@@ -136,7 +141,7 @@ type Result struct {
 	ExecutionTimeInMillisecond int64
 }
 
-func recordRuntimeWithError(f myFunction) (*Result, error) {
+func recordRuntime(f myFunction) (*Result, error) {
 	startTime := time.Now()
 
 	res, err := f.Do()
@@ -161,7 +166,7 @@ func main() {
 	fmt.Println("=== Parallel Test ===")
 	for _, K := range iterations {
 		fmt.Printf("Parallel (k=%d)", K)
-		resultPtr, err := recordRuntimeWithError(LeibnizPi{k: K})
+		resultPtr, err := recordRuntime(LeibnizPi{k: K})
 		if err != nil {
 			fmt.Println("Failed:", err)
 			return
@@ -172,7 +177,7 @@ func main() {
 	fmt.Println("\n=== Sequential Test ===")
 	for _, K := range iterations {
 		fmt.Printf("Sequential (k=%d)", K)
-		resultPtr, err := recordRuntimeWithError(LeibnizPiV2{k: K})
+		resultPtr, err := recordRuntime(LeibnizPiV2{k: K})
 		if err != nil {
 			fmt.Println("Failed:", err)
 			return
